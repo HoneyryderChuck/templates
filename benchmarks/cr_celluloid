@@ -1,0 +1,142 @@
+#!/usr/bin/env ruby
+require 'optparse'
+require 'rbtrace'
+
+
+require_relative "cr_celluloid_elements"
+
+$action = :benchmark
+OptionParser.new do |opts|
+  opts.on "-b", "--benchmark" do
+    $action = :benchmark
+  end
+  opts.on "-s", "--stacktrace" do
+    $action = :stacktrace
+  end
+  opts.on "-r", "--rubytrace" do
+    $action = :rubytrace
+  end
+end.parse(ARGV)
+
+
+IPS_NUM = 100
+BMBM_NUM = 100_000
+
+def rubytrace
+  #ConcurrentModules.perform(IPS_NUM, ConcurrentModules::CelluloidClass.new)
+  ConcurrentModules.perform(IPS_NUM, ConcurrentModules::AsyncClass.new)
+#  system("rbtrace -p #{Process.pid} -e ' ConcurrentModules.perform(#{IPS_NUM}, ConcurrentModules::CelluloidClass.new) '")
+end
+
+def stacktrace
+  dir = Dir.pwd
+  line = <<-OUT
+    strace -c ruby -e "require File.join('#{dir}', 'cr_celluloid_elements') ; ConcurrentModules.perform(#{IPS_NUM}, %s)" 
+  OUT
+  puts "--------------- Celluloid STrace ---------------"
+  puts %x{#{line % "ConcurrentModules::CelluloidClass.new"}}
+  puts "--------------- Concurrent Ruby STrace ---------------"
+  puts %x{#{line % "ConcurrentModules::AsyncClass.new"}}
+end
+
+def benchmark
+  require 'benchmark'
+  require 'benchmark/ips'
+  Benchmark.ips do |bm|
+    celluloid = ConcurrentModules::CelluloidClass.new
+    bm.report('celluloid') do
+      ConcurrentModules.perform(IPS_NUM, celluloid)      
+    end
+  
+    async = ConcurrentModules::AsyncClass.new
+    bm.report('async') do
+      ConcurrentModules.perform(IPS_NUM, async)
+    end
+  
+    bm.compare!
+  end
+  
+  Benchmark.bmbm do |bm|
+    celluloid = ConcurrentModules::CelluloidClass.new
+    bm.report('celluloid') do
+      ConcurrentModules.perform(IPS_NUM, celluloid)      
+    end
+  
+    async = ConcurrentModules::AsyncClass.new
+    bm.report('async') do
+      ConcurrentModules.perform(IPS_NUM, async)
+    end
+  end
+end
+
+case $action
+  when :benchmark then benchmark
+  when :stacktrace then stacktrace
+  when :rubytrace then rubytrace
+end
+
+__END__
+
+===========================================================
+Async Benchmarks
+===========================================================
+
+Computer:
+
+* OS X Yosemite
+  - Version 10.10.4
+* MacBook Pro
+  - Retina, 13-inch, Early 2015
+* Processor 3.1 GHz Intel Core i7
+* Memory 16 GB 1867 MHz DDR3
+* Physical Volumes:
+  - Apple SSD SM0512G
+  - 500 GB
+
+===========================================================
+ruby 2.2.2p95 (2015-04-13 revision 50295) [x86_64-darwin14]
+===========================================================
+
+Calculating -------------------------------------
+           celluloid    26.000  i/100ms
+               async    47.000  i/100ms
+-------------------------------------------------
+           celluloid    279.912  (± 6.1%) i/s -      1.404k
+               async    478.932  (± 2.1%) i/s -      2.397k
+
+Comparison:
+               async:      478.9 i/s
+           celluloid:      279.9 i/s - 1.71x slower
+
+Rehearsal ---------------------------------------------
+celluloid   4.080000   0.620000   4.700000 (  4.695271)
+async       2.280000   0.100000   2.380000 (  2.345327)
+------------------------------------ total: 7.080000sec
+
+                user     system      total        real
+celluloid   3.910000   0.580000   4.490000 (  4.503884)
+async       2.220000   0.190000   2.410000 (  2.340467)
+
+===========================================================
+jruby 1.7.19 (1.9.3p551) 2015-01-29 20786bd on Java HotSpot(TM) 64-Bit Server VM 1.8.0_45-b14 +jit [darwin-x86_64]
+===========================================================
+
+Calculating -------------------------------------
+           celluloid     2.000  i/100ms
+               async    32.000  i/100ms
+-------------------------------------------------
+           celluloid     72.887  (±26.1%) i/s -    334.000
+               async      1.822k (±31.6%) i/s -      6.368k
+
+Comparison:
+               async:     1821.9 i/s
+           celluloid:       72.9 i/s - 25.00x slower
+
+Rehearsal ---------------------------------------------
+celluloid   8.890000   1.700000  10.590000 (  5.930000)
+async       2.250000   0.150000   2.400000 (  1.283000)
+----------------------------------- total: 12.990000sec
+
+                user     system      total        real
+celluloid   6.310000   1.530000   7.840000 (  5.817000)
+async       1.590000   0.060000   1.650000 (  0.912000)
