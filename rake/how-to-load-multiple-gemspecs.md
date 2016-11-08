@@ -25,3 +25,24 @@ def name
 end
 
 ```
+
+In Gemfiles, declare them separately
+
+```ruby
+# Gemfile
+gemspec(path: "./firstgem")
+gemspec(path: "./secondgem")
+gemspec(path: "./thirdgem")
+gemspec(path: "./forthgem")
+``` 
+
+If you're using rspec, you'll want to load the specs separately
+
+```ruby
+# as rake task
+desc "run all specs"
+RSpec::Core::RakeTask.new(:testall) do |t|
+  pattern = gemspecs.map(&:name).join(',')
+  t.pattern = t.pattern.insert(0, "{#{pattern}}/") # go to subdir
+  t.rspec_opts = "--require ./{#{pattern}}/spec/spec_helper.rb" # load separate gemspec
+end
